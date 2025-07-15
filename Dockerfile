@@ -1,5 +1,3 @@
-FROM openjdk:17-jdk-slim
-VOLUME /tmp
-ARG JAR_FILE=target/spring-boot-web.jar
-COPY ${JAR_FILE} app.jar
+FROM eclipse-temurin:17-jre
+COPY target/*.jar app.jar
 ENTRYPOINT ["java","-jar","/app.jar"]
