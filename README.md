@@ -1,5 +1,3 @@
----
-
 # Jenkins CI/CD Pipeline for Java Web App
 
 This project sets up a simple CI/CD pipeline for Java web applications using Jenkins, Maven, Semgrep, Docker, and GitHub. It builds, tests, scans, and packages your app, then pushes Docker images to a registry. For Kubernetes deployment and GitOps, see: [gitops-argocd-java-app](https://github.com/dakkani/gitops-argocd-java-app.git)
