@@ -1,128 +1,107 @@
 pipeline {
-    agent {
-        docker {
-            image 'maven:3.8.6-openjdk-17'
-            args '-v /root/.m2:/root/.m2' // Mount Maven local repository for caching
-        }
+    agent any
+
+    options {
+        timeout(time: 1, unit: 'HOURS')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        disableConcurrentBuilds()
+        timestamps()
     }
 
     environment {
-        // DockerHub credentials (configured in Jenkins as 'dockerhub-credentials')
-        DOCKERHUB_USERNAME = 'your_dockerhub_username' // Replace with your DockerHub username
+        DOCKERHUB_USERNAME       = 'omer2k1'
         DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials'
-
-        // Git repository for Kubernetes manifests (where ArgoCD pulls from)
-        GIT_MANIFESTS_REPO = 'git@github.com:your_org/your_k8s_manifests_repo.git' // Replace with your manifests repo
-        GIT_MANIFESTS_CREDENTIALS_ID = 'git-ssh-credentials' // Jenkins SSH credentials for the manifests repo
-
-        // SonarQube credentials (configured in Jenkins as 'sonarqube-credentials')
-        SONAR_CREDENTIALS_ID = 'sonarqube-credentials'
-
-        // Email recipients for notifications
-        EMAIL_RECIPIENTS = 'your_email@example.com' // Replace with actual email addresses
+        DOCKERHUB_REPOS          = 'omer2k1/java-web-app'
+        GIT_MANIFESTS_REPO       = 'https://github.com/dakkani/gitops-argocd-java-app.git'
+        PATH                     = "${env.HOME}/.local/bin:${env.PATH}"
     }
 
     stages {
-        stage('Git Checkout') {
+
+        stage('Checkout Application Code') {
             steps {
-                echo 'Checking out SCM...'
-                checkout scm
+                echo 'Checking out source...'
+                checkout([
+                    $class: 'GitSCM',
+                    branches: [[name: 'main']],
+                    userRemoteConfigs: [[url: 'https://github.com/dakkani/CI-CD-with-GitOps.git']]
+                ])
             }
         }
 
-        stage('Build and Test') {
+        stage('Build and Unit Tests') {
             steps {
-                echo 'Building and running tests...'
-                sh 'mvn clean install'
+                echo 'Building and running unit tests...'
+                sh 'mvn clean install -B'
             }
         }
 
-        stage('SonarQube Analysis') {
+        stage('Static Analysis (Semgrep)') {
             steps {
-                echo 'Running SonarQube analysis...'
-                withCredentials([string(credentialsId: env.SONAR_CREDENTIALS_ID, variable: 'SONAR_TOKEN')]) {
-                    sh "mvn sonar:sonar -Dsonar.login=\"${SONAR_TOKEN}\"
-                }
+                echo 'Running Semgrep static analysis...'
+                sh '''
+                    python3 -m pip install --user semgrep
+                    ~/.local/bin/semgrep scan --config p/java --error
+                '''
             }
         }
 
-        stage('Docker Containerization and Push') {
+        stage('Docker Build') {
             steps {
-                echo 'Building Docker image and pushing to DockerHub...'
                 script {
-                    def appVersion = sh(returnStdout: true, script: "mvn help:evaluate -Dexpression=project.version -q -DforceStdout").trim()
-                    def imageName = "your_dockerhub_username/spring-boot-demo:${appVersion}" // Replace with your DockerHub username
-
-                    withCredentials([usernamePassword(credentialsId: env.DOCKERHUB_CREDENTIALS_ID, usernameVariable: 'DOCKER_USER', passwordVariable: 'DOCKER_PASS')]) {
-                        sh "docker build -t ${imageName} ."
-                        sh "echo ${DOCKER_PASS} | docker login -u ${DOCKER_USER} --password-stdin"
-                        sh "docker push ${imageName}"
-                    }
-                    // Store the image name for later use in deployment
+                    echo 'Building Docker image...'
+                    def imageTag = env.BUILD_NUMBER // Use only the Jenkins build number
+                    def imageName = "${env.DOCKERHUB_REPOS}:${imageTag}"
                     env.DEPLOY_IMAGE = imageName
+                    docker.build(imageName, ".")
                 }
             }
         }
 
-        stage('Deployment with ArgoCD (via Git)') {
+        stage('Docker Push') {
             steps {
-                echo 'Updating Kubernetes manifests and pushing to Git for ArgoCD...'
-                script {
-                    // Clone the manifests repository
-                    sh "git config --global user.email 'jenkins@example.com'"
-                    sh "git config --global user.name 'Jenkins CI'"
-                    sh "git clone ${GIT_MANIFESTS_REPO} k8s-manifests"
-
-                    dir('k8s-manifests') {
-                        // Assuming your deployment manifest is at k8s-manifests/deployment.yaml
-                        // Replace 'your_app_image' with the actual image name in your manifest
-                        sh "sed -i 's|your_dockerhub_username/spring-boot-demo:.*|${env.DEPLOY_IMAGE}|g' deployment.yaml" // Adjust path and image name as needed
-                        sh "git add deployment.yaml"
-                        sh "git commit -m 'Update spring-boot-demo image to ${env.DEPLOY_IMAGE} [skip ci]'" // [skip ci] to prevent infinite loops
-                        withCredentials([sshUserPrivateKey(credentialsId: env.GIT_MANIFESTS_CREDENTIALS_ID, keyFileVariable: 'GIT_SSH_KEY')]) {
-                            sh "GIT_SSH_COMMAND='ssh -i ${GIT_SSH_KEY} -o StrictHostKeyChecking=no' git push origin master"
-                        }
-                    }
+               script {
+               echo "Pushing Docker image to Docker Hub: ${env.DEPLOY_IMAGE}"
+               docker.withRegistry('https://index.docker.io/v1/', env.DOCKERHUB_CREDENTIALS_ID) {
+                docker.image(env.DEPLOY_IMAGE).push()
                 }
+               }
             }
         }
 
-        stage('Smoke Test') {
-            steps {
-                echo 'Running smoke tests...'
-                // This is a placeholder. You would typically wait for the deployment to be ready
-                // and then hit the application's endpoint.
-                // Example: sh 'curl -f http://your-app-url.com/health'
-                echo 'Smoke test placeholder: Verify application health after deployment.'
+stage('Update GitOps Repository') {
+    steps {
+        echo 'Updating Kubernetes manifests in GitOps repo...'
+        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+            dir('k8s-manifests') {
+                sh '''
+                    git clone https://github.com/dakkani/gitops-argocd-java-app.git .
+                    git config user.email "jenkins@example.com"
+                    git config user.name "Jenkins CI"
+                    sed -i "s|image: ${DOCKERHUB_REPOS}:.*|image: ${DEPLOY_IMAGE}|g" deployment.yaml
+                    git add deployment.yaml
+                    git commit -m "Update image to ${DEPLOY_IMAGE} [skip ci]" || echo "No changes to commit"
+                    git push https://$GITHUB_TOKEN@github.com/dakkani/gitops-argocd-java-app.git main
+                '''
             }
         }
+    }
+}
 
-        stage('Rollback') {
-            steps {
-                echo 'Rollback stage (placeholder)...'
-                // This stage would contain logic to revert to a previous stable version
-                // In an ArgoCD setup, this might involve reverting the Git commit in the manifests repo
-                echo 'Rollback placeholder: Implement logic to revert deployment if needed.'
-            }
-        }
+
+
     }
 
     post {
         always {
-            echo 'Cleaning up workspace...'
+            echo 'Pipeline finished. Cleaning up workspace...'
             cleanWs()
         }
         success {
             echo 'Build successful!'
-            mail to: env.EMAIL_RECIPIENTS,
-                 subject: "Jenkins Build Success: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                 body: "The Jenkins build for ${env.JOB_NAME} #${env.BUILD_NUMBER} was successful.\nBuild URL: ${env.BUILD_URL}"
         }
         failure {
             echo 'Build failed!'
-            mail to: env.EMAIL_RECIPIENTS,
-                 subject: "Jenkins Build Failed: ${env.JOB_NAME} - ${env.BUILD_NUMBER}",
-                 body: "The Jenkins build for ${env.JOB_NAME} #${env.BUILD_NUMBER} failed.\nBuild URL: ${env.BUILD_URL}"
         }
     }
 }
