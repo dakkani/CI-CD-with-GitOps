@@ -13,11 +13,10 @@ pipeline {
         DOCKERHUB_CREDENTIALS_ID = 'dockerhub-credentials'
         DOCKERHUB_REPOS          = 'omer2k1/java-web-app'
         GIT_MANIFESTS_REPO       = 'https://github.com/dakkani/gitops-argocd-java-app.git'
-        PATH                     = "${env.HOME}/.local/bin:${env.PATH}"
+        PATH                     = "${HOME}/.local/bin:${PATH}"
     }
 
     stages {
-
         stage('Checkout Application Code') {
             steps {
                 echo 'Checking out source...'
@@ -50,7 +49,7 @@ pipeline {
             steps {
                 script {
                     echo 'Building Docker image...'
-                    def imageTag = env.BUILD_NUMBER // Use only the Jenkins build number
+                    def imageTag = env.BUILD_NUMBER
                     def imageName = "${env.DOCKERHUB_REPOS}:${imageTag}"
                     env.DEPLOY_IMAGE = imageName
                     docker.build(imageName, ".")
@@ -60,36 +59,33 @@ pipeline {
 
         stage('Docker Push') {
             steps {
-               script {
-               echo "Pushing Docker image to Docker Hub: ${env.DEPLOY_IMAGE}"
-               docker.withRegistry('https://index.docker.io/v1/', env.DOCKERHUB_CREDENTIALS_ID) {
-                docker.image(env.DEPLOY_IMAGE).push()
+                script {
+                    echo "Pushing Docker image to Docker Hub: ${env.DEPLOY_IMAGE}"
+                    docker.withRegistry('https://index.docker.io/v1/', env.DOCKERHUB_CREDENTIALS_ID) {
+                        docker.image(env.DEPLOY_IMAGE).push()
+                    }
                 }
-               }
             }
         }
 
-stage('Update GitOps Repository') {
-    steps {
-        echo 'Updating Kubernetes manifests in GitOps repo...'
-        withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
-            dir('k8s-manifests') {
-                sh '''
-                    git clone https://github.com/dakkani/gitops-argocd-java-app.git .
-                    git config user.email "jenkins@example.com"
-                    git config user.name "Jenkins CI"
-                    sed -i "s|image: ${DOCKERHUB_REPOS}:.*|image: ${DEPLOY_IMAGE}|g" deployment.yaml
-                    git add deployment.yaml
-                    git commit -m "Update image to ${DEPLOY_IMAGE} [skip ci]" || echo "No changes to commit"
-                    git push https://$GITHUB_TOKEN@github.com/dakkani/gitops-argocd-java-app.git main
-                '''
+        stage('Update GitOps Repository') {
+            steps {
+                echo 'Updating Kubernetes manifests in GitOps repo...'
+                withCredentials([string(credentialsId: 'github-token', variable: 'GITHUB_TOKEN')]) {
+                    dir('k8s-manifests') {
+                        sh """
+                            git clone https://github.com/dakkani/gitops-argocd-java-app.git .
+                            git config user.email "jenkins@example.com"
+                            git config user.name "Jenkins CI"
+                            sed -i "s|image: ${DOCKERHUB_REPOS}:.*|image: ${DEPLOY_IMAGE}|g" deployment.yaml
+                            git add deployment.yaml
+                            git commit -m "Update image to ${DEPLOY_IMAGE} [skip ci]" || echo "No changes to commit"
+                            git push https://\$GITHUB_TOKEN@github.com/dakkani/gitops-argocd-java-app.git main
+                        """
+                    }
+                }
             }
         }
-    }
-}
-
-
-
     }
 
     post {
