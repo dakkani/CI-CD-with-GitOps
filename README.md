@@ -1,87 +1,75 @@
+---
+
 # Jenkins CI/CD Pipeline for Java Web App
 
-This project provides a **CI/CD pipeline** integrating **Jenkins**, **Maven**, **Semgrep**, **Docker**, **Git**, and **GitHub** for building, testing, scanning, and packaging Java applications. The pipeline is designed to automate the process from code commit to Docker image building, security scanning, and deployment artifact updates, enabling a best-practices DevSecOps workflow.
-
-> The Kubernetes deployment and GitOps continuation of this pipeline is available at:  
-> [gitops-argocd-java-app](https://github.com/dakkani/gitops-argocd-java-app.git)
+This project sets up a simple CI/CD pipeline for Java web applications using Jenkins, Maven, Semgrep, Docker, and GitHub. It builds, tests, scans, and packages your app, then pushes Docker images to a registry. For Kubernetes deployment and GitOps, see: [gitops-argocd-java-app](https://github.com/dakkani/gitops-argocd-java-app.git)
 
 ---
 
 ## Features
 
-- **Source Integration**: Pulls code from GitHub.
-- **Build & Test**: Uses Maven for build, dependency management, and running tests.
-- **Security Analysis**: Integrates Semgrep for static code analysis.
-- **Containerization**: Builds Docker images of the Java application.
-- **Continuous Delivery**: Pushes images to a container registry and updates Kubernetes manifests via GitOps (see the linked continuation project).
+- Pulls code from GitHub
+- Builds & tests with Maven
+- Runs static code analysis with Semgrep
+- Builds Docker images
+- Pushes images to a container registry
+- Supports GitOps-based Kubernetes deployments (see continuation project)
 
 ---
 
 ## Prerequisites
 
-Ensure the following **software is installed** on the Jenkins host:
-- **Java (JDK 11 or higher)**
-- **Python (for Semgrep)**
-- **Jenkins**
-- **Docker** (latest stable)
-- **Maven**
-- **Git**
+Install these on your Jenkins server:
+- Java (JDK 11+)
+- Python (for Semgrep)
+- Jenkins
+- Docker
+- Maven
+- Git
 
-Add the Jenkins user to the Docker group to allow container build and push:
-
-```
-bash
+Add Jenkins user to the Docker group:
+```bash
 sudo usermod -aG docker jenkins
 ```
-
-
-After running the command, **restart Jenkins** or log out and back in for group changes to take effect.
+Restart Jenkins or log out/in after running the command.
 
 ---
 
 ## GitHub Setup
 
-1. **Create a Personal Access Token**:
-   - Go to *GitHub ➔ Settings ➔ Developer settings ➔ Personal access tokens (classic)*.
-   - Generate a new token with at least `repo` scope for accessing and updating repositories and manifests.
-
-2. **Fork and Create Repositories**:
-   - **Fork this repository** to your own GitHub account.
-   - **Create a new repository** for storing your Kubernetes manifests.
-
-3. **Configure Jenkins Credentials**:
-   - Add your GitHub token in Jenkins as a secret credential, referenced by the pipeline job.
+1. **Personal Access Token:** Create one with `repo` scope (GitHub ➔ Settings ➔ Developer settings ➔ Personal access tokens).
+2. **Repositories:** Fork this repo and create another repo for Kubernetes manifests.
+3. **Jenkins Credentials:** Add your GitHub token to Jenkins as a secret credential.
 
 ---
 
 ## Usage
 
-1. **Pipeline Configuration**:
-   - Clone this repo and adapt the Jenkinsfile for your environment (`repo URLs`, `docker registry`, credentials IDs, etc.).
-   - Configure required environment variables/secrets in Jenkins.
-
-2. **Typical Pipeline Steps**:
-   - `checkout`: Clone code from GitHub.
-   - `build`: Use Maven to compile and test.
-   - `scan`: Run Semgrep for code scanning.
-   - `dockerize`: Build and tag Docker image.
-   - `push`: Push Docker image to container registry.
-   - `update manifests`: (see gitops-argocd-java-app) Update Kubernetes manifests repo with new image tag.
+1. Clone this repo and update the Jenkinsfile for your environment (URLs, registry, credentials, etc).
+2. Set necessary secrets in Jenkins.
+3. Pipeline steps:
+   - Checkout code
+   - Build & test (Maven)
+   - Scan code (Semgrep)
+   - Build & tag Docker image
+   - Push image to registry
+   - Update manifests (see [gitops-argocd-java-app](https://github.com/dakkani/gitops-argocd-java-app.git))
 
 ---
 
-## Extending with Kubernetes and GitOps
+## Extending with Kubernetes & GitOps
 
-- To enable **automated deployments** via Kubernetes, integrate this pipeline with the manifests and patterns in [gitops-argocd-java-app](https://github.com/dakkani/gitops-argocd-java-app.git).
-- This enables **end-to-end automation** from code commit through containerization to Kubernetes deployment using Argo CD.
+- Integrate with [gitops-argocd-java-app](https://github.com/dakkani/gitops-argocd-java-app.git) for automated Kubernetes deployments with Argo CD.
 
 ---
 
 ## Contribution & Support
 
-- Fork and open PRs for improvements.
-- Issues and questions are welcome via GitHub Issues.
+- Fork and submit PRs for improvements.
+- Open issues for questions or problems.
 
 ---
 
-**Note:** Jenkins must run with Docker access for building and pushing images, and your GitHub tokens/credentials must be securely managed within Jenkins.
+**Note:** Jenkins needs Docker access, and GitHub tokens should be securely managed in Jenkins.
+
+---
