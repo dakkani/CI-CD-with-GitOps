@@ -1,4 +1,4 @@
-# Jenkins CI/CD Pipeline Template
+# Jenkins CI/CD Pipeline for Java Web App
 
 This project provides a **CI/CD pipeline** integrating **Jenkins**, **Maven**, **Semgrep**, **Docker**, **Git**, and **GitHub** for building, testing, scanning, and packaging Java applications. The pipeline is designed to automate the process from code commit to Docker image building, security scanning, and deployment artifact updates, enabling a best-practices DevSecOps workflow.
 
